@@ -144,17 +144,35 @@ func makeGitbot(repoPath string, keyfile string, secret string, preCommand strin
 	}, nil
 }
 
-func (gb *Gitbot) Update() {
+func (gb *Gitbot) Reset(fetch bool) {
 	if gb.preCommand != "" {
 		runCommand(gb.preCommand)
 	}
 
-	err := gb.worktree.Pull(&git.PullOptions{
-		RemoteName: gb.remoteName,
-		Auth:       gb.auth,
+	if fetch {
+		err := gb.repo.Fetch(&git.FetchOptions{
+			RemoteName: gb.remoteName,
+			Auth:       gb.auth,
+		})
+		if err != nil && err != git.NoErrAlreadyUpToDate {
+			log.Printf("Failed to fetch remote: %v", err)
+			return
+		}
+	}
+
+	remoteBranchName := fmt.Sprintf("refs/remotes/%s/%s", gb.remoteName, gb.refName.Short())
+	remoteRef, err := gb.repo.Reference(plumbing.ReferenceName(remoteBranchName), true)
+	if err != nil {
+		log.Printf("Failed to get remote reference %s: %v", remoteBranchName, err)
+		return
+	}
+
+	err = gb.worktree.Reset(&git.ResetOptions{
+		Mode:   git.HardReset,
+		Commit: remoteRef.Hash(),
 	})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		log.Printf("Failed to pull from remote: %v", err)
+	if err != nil {
+		log.Printf("Failed to reset worktree: %v", err)
 		return
 	}
 
@@ -238,7 +256,7 @@ func (gb *Gitbot) webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Received valid webhook, updating...")
 
-	go gb.Update()
+	go gb.Reset(true)
 }
 
 func main() {
@@ -269,7 +287,7 @@ func main() {
 		log.Fatalf("Failed to check if repository is behind remote: %v", err)
 	} else if isBehind {
 		log.Printf("Local repository is behind remote, updating...")
-		gitbot.Update()
+		gitbot.Reset(false)
 	}
 
 	http.HandleFunc("POST /", gitbot.webhookHandler)
