@@ -194,16 +194,6 @@ func (gb *Gitbot) isBehind() (bool, error) {
 }
 
 func (gb *Gitbot) webhookHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Allow", "POST, OPTIONS")
-		defaultResponse(w, http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		defaultResponse(w, http.StatusMethodNotAllowed)
-		return
-	}
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Failed to read request body: %v", err)
@@ -246,7 +236,7 @@ func (gb *Gitbot) webhookHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Received valid webhook, running update command...")
+	log.Printf("Received valid webhook, updating...")
 
 	go gb.Update()
 }
@@ -261,7 +251,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		log.Fatal("Usage: updater [--port <port>] [--secret <secret>] [--keyfile <kefile>] [--pre-command <pre_command>] [--post-command <post_command>] <repo-path>")
+		log.Fatal("Usage: updater [--port <port>] [--keyfile <kefile>] [--secret <secret>] [--pre-command <pre_command>] [--post-command <post_command>] <repo-path>")
 	}
 	repoPath := args[0]
 
@@ -278,11 +268,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to check if repository is behind remote: %v", err)
 	} else if isBehind {
-		log.Printf("Local repository is behind remote, running update command...")
+		log.Printf("Local repository is behind remote, updating...")
 		gitbot.Update()
 	}
 
-	http.HandleFunc("/", gitbot.webhookHandler)
+	http.HandleFunc("POST /", gitbot.webhookHandler)
 
 	address := fmt.Sprintf(":%d", *port)
 	log.Printf("Listening on %s", address)
