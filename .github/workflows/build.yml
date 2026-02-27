@@ -1,0 +1,53 @@
+name: Build and Upload
+
+on: push
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install go
+        run: |
+          curl -fSL https://go.dev/dl/go1.26.0.linux-${{ matrix.arch }}.tar.gz | sudo tar -xzC /usr/local
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+
+      - name: Build
+        run: |
+          go build -o gitbot-${{ matrix.arch }}
+
+      - name: Upload artifact
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v6
+        with:
+          name: gitbot-${{ matrix.arch }}
+          path: gitbot-${{ matrix.arch }}
+
+  release:
+    name: Release
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: all_builds
+          pattern: gitbot-*
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: all_builds/*
